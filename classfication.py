@@ -5,11 +5,17 @@ import numpy as np
 import torch
 from torch import nn, optim
 from torch.utils.data import TensorDataset, DataLoader
+from net import *
 
+"""
+n-nary classfy : c,l,p,e(w,u)
+hier : s1, s2, s3, s4
+
+"""
 
 def data_processing(alg_dict, mode='ori', batch_size=60, train=True, labelSmoothing=False):
     # Training Constants
-    EPS = 0.1 if labelSmoothing else 0
+    EPS = 0.1 if labelSmoothing else 0 #Smoothing labels
     DATASIZE = 30000 if train else 10000
     NUMCLASSES = sum(list(map(int, alg_dict.values())))
     TRCODE = "TR" if train else "TE"
@@ -27,8 +33,7 @@ def data_processing(alg_dict, mode='ori', batch_size=60, train=True, labelSmooth
                     f"{PATH}/WOW(fixed key)/{TRCODE}(bpp0).npy")
             else:
                 loadedData = np.load(f"{PATH}/{key}/{TRCODE}(bpp40).npy")
-            data[DATASIZE*count:DATASIZE *
-                 (count+1), 0, :, :] = loadedData[:, :, :, 0]
+            data[DATASIZE*count : DATASIZE*(count+1), 0, :, :] = loadedData[:, :, :, 0]
             count += 1
             print(key, "done")
             del loadedData
@@ -36,10 +41,10 @@ def data_processing(alg_dict, mode='ori', batch_size=60, train=True, labelSmooth
     # Setting Label
     label = np.zeros([data.shape[0], NUMCLASSES])
     if labelSmoothing:
-        label.fill(EPS/(NUMCLASSES - 1))
+        label.fill(EPS/(NUMCLASSES - 1)) #non-target class
     for i in range(NUMCLASSES):
         label[int(data.shape[0]/NUMCLASSES) *
-              i:int(data.shape[0]/NUMCLASSES)*(i+1), i] = 1 - EPS
+              i:int(data.shape[0]/NUMCLASSES)*(i+1), i] = 1 - EPS #target class
 
     # Create Data Loader
     data = torch.tensor(data, dtype=torch.float)
@@ -52,14 +57,13 @@ def data_processing(alg_dict, mode='ori', batch_size=60, train=True, labelSmooth
     return data_loader
 
 
-def Train_Networks(Net, name, alg_dict, batch_size=60, labelSmoothing=False):
+def Train_Networks(Net, name, alg_dict, mode='ori', batch_size=60, labelSmoothing=False):
     # Make folder that save results
     if not os.path.exists(f"./results/{name}"):
         os.makedirs(f"./results/{name}")
 
     # Data_processing
-    train_data = data_processing(
-        alg_dict=alg_dict, batch_size=batch_size, train=True, labelSmoothing=labelSmoothing)
+    train_data = data_processing(alg_dict=alg_dict, batch_size=batch_size, mode=mode, train=True, labelSmoothing=labelSmoothing)
 
     # Network Settings
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -87,32 +91,28 @@ def Train_Networks(Net, name, alg_dict, batch_size=60, labelSmoothing=False):
 
             # Predict State
             if(train_count % 50 == 0):
-                print(
-                    f"Epoch: {epo}/100({epo/EPOCH*100}%), loss: {loss.item()}")
+                print(f"Epoch: {epo}/100({epo/EPOCH*100}%), loss: {loss.item()}")
                 print("Prediction : ", y_pred[0])
 
             # Save Parameters
             if(train_count % 50000 == 0):
                 print('Paramter Saved')
-                torch.save(Net.state_dict(), "./results/%s/params" %
-                           name+str(train_count)+".prm")
+                torch.save(Net.state_dict(), "./results/%s/params" %name+str(train_count)+".prm")
             train_count += 1
         # lr decay
         scheduler.step()
-    torch.save(Net.state_dict(), "./results/%s/params_last.prm")
+    torch.save(Net.state_dict(), "./results/%s/params_last.prm"%name)
     print("TRAINING COMPLETE")
 
 
-def Evaluate_Networks(Net, name, alg_dict, batch_size=200, labelSmoothing=False):
+def Evaluate_Networks(Net, name, alg_dict, mode='ori', batch_size=200, labelSmoothing=False):
     data_size = 10000
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    Net.load_state_dict(torch.load(
-        "./results/%s/last.prm" % name), strict=False)
+    Net.load_state_dict(torch.load("./results/%s/params_last.prm" % name), strict=False)
     Net = Net.to(device).eval()
 
     # Data_processing
-    test_data = data_processing(
-        alg_dict=alg_dict, batch_size=batch_size, train=False, labelSmoothing=labelSmoothing)
+    test_data = data_processing(alg_dict=alg_dict, batch_size=batch_size, mode=mode, train=False, labelSmoothing=labelSmoothing)
 
     # Test
     ys = []
@@ -133,23 +133,25 @@ def Evaluate_Networks(Net, name, alg_dict, batch_size=200, labelSmoothing=False)
 
     for key, value in alg_dict.items():
         if(value):
-            acc = (ys[data_size*count:data_size*(count+1)] == ypreds[data_size *
-                                                                     count:data_size*(count+1)]).float().sum() / data_size
+            acc = (ys[data_size*count:data_size*(count+1)] == ypreds[data_size *count:data_size*(count+1)]).float().sum() / data_size
             print(key, acc.item())
             count += 1
 
     acc = (ys == ypreds).float().sum() / len(ys)
     print('Total AVG : ', acc.item())
 
-
+#TOUCH HERE!!!
 Algs = {
-    # Binary Classfication
+    # n-Classfication
     "COVER": 1,
-    "1LSB": 0,
-    "PVD": 0,
+    "1LSB": 1,
+    "PVD": 1,
     "WOW(fixed key)": 0,
     "S-UNIWARD(fixed key)": 0,
+    "EDGE": 1,
+    }
 
+Alg_hier = {
     # Hier Strc
     "ORIGIN": 0,
     "STEGO": 0,  # s1
@@ -161,9 +163,11 @@ Algs = {
     "UNIWARD": 0,  # s4
 }
 
-#import mdrl18 as model
+mode = 'ori'
+name = 'Pelee_clpe'
+Net = Pelee.Model(num_classes=4)
+#To HERE!!!
 
-Net = model.Model(2)
-name = "drl_ch"
-Train_Networks(Net, name, Algs, batch_size=60)
-Evaluate_Networks(Net, name, Algs, batch_size=200)
+alg_dict = Algs if mode == 'ori' else Alg_hier
+Train_Networks(Net=Net, name=name, alg_dict=alg_dict, mode=mode, batch_size=60)
+Evaluate_Networks(Net=Net, name=name, alg_dict=alg_dict, mode=mode, batch_size=200)

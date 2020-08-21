@@ -7,6 +7,7 @@ import torch.nn.functional as F
 overall networks
 input > conv > dense > conv > pooling > dense > conv > pooling > dense > pooling > Linear > predict
 '''
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class bn_relu_conv(nn.Module):
     '''Forwarding Conv Block(bn - relu - conv)'''
@@ -68,7 +69,7 @@ class DenseNet(nn.Module):
                     [-2,8,-12,8,-2],
                     [2,-6,8,-6,2],
                     [-1,2,-2,2,-1]]]], dtype=torch.float)/12
-        self.hpf = self.hpf.cuda()
+        self.hpf = self.hpf.to(device)
         # (num_layers-4)//6 16
         num_bottleneck_layers = (num_layers - 4) // 6
         
@@ -127,5 +128,5 @@ class DenseNet(nn.Module):
         x = x.view(x.size(0), -1)
         x = self.fc_layer(x)
         return x
-def Model():
-    return DenseNet(growth_rate=12, num_layers=52, theta=0.5, drop_rate=0.2, num_classes=2)
+def Model(num_classes):
+    return DenseNet(growth_rate=12, num_layers=52, theta=0.5, drop_rate=0.2, num_classes=num_classes)

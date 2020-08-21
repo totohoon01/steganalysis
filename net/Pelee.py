@@ -4,6 +4,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class conv_bn_relu(nn.Module):
     def __init__(self, nin, nout, kernel_size, stride, padding, bias=False):
         super(conv_bn_relu, self).__init__()
@@ -90,16 +92,15 @@ class Transition_layer(nn.Sequential):
       self.add_module('conv_1x1', conv_bn_relu(nin=nin, nout=int(nin*theta), kernel_size=1, stride=1, padding=0, bias=False))
       self.add_module('avg_pool_2x2', nn.AvgPool2d(kernel_size=2, stride=2, padding=0)) 
     
-class PeleeNet(nn.Module):
+class Model(nn.Module):
     def __init__(self, growth_rate=32, num_dense_layers=[3,4,8,6], theta=1, drop_rate=0.0, num_classes=10):
-        super(PeleeNet, self).__init__()
+        super(Model, self).__init__()
         self.hpf = torch.tensor([[[[-1,2,-2,2,-1],
                     [2,-6,8,-6,2],
                     [-2,8,-12,8,-2],
                     [2,-6,8,-6,2],
                     [-1,2,-2,2,-1]]]], dtype=torch.float)/12
-        self.hpf = self.hpf.cuda()
-        
+        self.hpf = self.hpf.to(device)
         assert len(num_dense_layers) == 4
         
         self.features = nn.Sequential()

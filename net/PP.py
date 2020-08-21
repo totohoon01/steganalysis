@@ -6,15 +6,22 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import Nets.srm as srm
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 class Model(nn.Module):
-    def __init__(self, classes=3):
+    def __init__(self, num_classes=3):
         """
         PP Net 60 to 1920
         """
         super(Model, self).__init__()
-        self.hpf = srm.srm_filter(Useful=True)
-        self.conv1 = nn.Conv2d(self.hpf.shape[0],60,kernel_size=5,padding=2, bias=False)
+        self.hpf = torch.tensor([[[[-1,2,-2,2,-1],
+                    [2,-6,8,-6,2],
+                    [-2,8,-12,8,-2],
+                    [2,-6,8,-6,2],
+                    [-1,2,-2,2,-1]]]], dtype=torch.float)/12
+        self.hpf = self.hpf.to(device)
+        self.conv1 = nn.Conv2d(1,60,kernel_size=5,padding=2, bias=False)
         self.bn1 = nn.BatchNorm2d(60)
         self.conv2 = nn.Conv2d(60,120,kernel_size=5,padding=2)
         self.bn2 = nn.BatchNorm2d(120)
@@ -29,7 +36,7 @@ class Model(nn.Module):
         self.AvgPooling = nn.AvgPool2d(5,2,2)
         self.GlobalPooling = nn.AvgPool2d(8)
         self.fc = nn.Sequential(
-                nn.Linear(1920,classes),
+                nn.Linear(1920,num_classes),
                 nn.Softmax(dim=1)
                 )
         
